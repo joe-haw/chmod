@@ -1,7 +1,7 @@
 # Chmod 
 Chmod CLI Application and Library - written in Haskell
 
-## App Usage
+## CLI Usage
 
 ```bash
 # Usage: [ugoa][=+-][rwx],... path
@@ -10,6 +10,7 @@ cabal run chmod a=r,ug=rwx /tmp/a.tx
 
 ## Library Usage
 
+### Full Example 
 ```haskell
 import Chmod
 import ChmodCli
@@ -26,7 +27,20 @@ main = do
 
   chmod new_mode path
   
-  putStrLn $ "OK."
+  putStrLn "OK."
+```
+
+### chmod only
+
+```haskell
+import ChmodSystem
+
+main :: IO ()
+main = do
+  let path = "/tmp/a.txt"
+  chmod 0o777 path
+
+  putStrLn "OK."
 ```
 
 ## License

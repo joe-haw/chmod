@@ -62,29 +62,47 @@ applySetPermission perms set_perm =
 
 toMode :: Map Target Permission -> Int
 toMode perms =
-  Map.foldrWithKey toMode' 0 perms
+  let
+    modes = Map.map toMode' perms
+    getMode' t = shift' t $ Map.findWithDefault 0 t modes
+
+    user_mode   = getMode' User
+    group_mode  = getMode' Group
+    others_mode = getMode' Others
+
+    mode = user_mode + group_mode + others_mode
+  in mode
   where
-    toMode' :: Target -> Permission -> Int -> Int
-    toMode' target perm acc =
+    shift' :: Target -> Int -> Int 
+    shift' User   mode  = shiftL mode 6
+    shift' Group  mode  = shiftL mode 3
+    shift' Others mode  = shiftL mode 0
+    toMode' :: Permission -> Int
+    toMode' perm =
       let
         read  = if r perm then 4 else 0
         write = if w perm then 2 else 0
         exec  = if x perm then 1 else 0
         mode = read + write + exec
-      in case target of
-        User    -> acc .|. shiftL mode 6
-        Group   -> acc .|. shiftL mode 3
-        Others  -> acc .|. shiftL mode 0
+      in mode
 
 toPermissions :: Int -> Map Target Permission
 toPermissions mode =
   let 
-    user_mode   = (shiftR mode 6) .&. 7
-    group_mode  = (shiftR mode 3) .&. 7
-    others_mode = (shiftR mode 0) .&. 7
-    perms = Map.fromList [(User, user_mode), (Group, group_mode), (Others, others_mode)]
-  in Map.map toPerm' perms
+    user_mode   = getMode' User   mode
+    group_mode  = getMode' Group  mode
+    others_mode = getMode' Others mode
+
+    modes = Map.fromList [
+      (User, user_mode),
+      (Group, group_mode),
+      (Others, others_mode)]
+  in Map.map toPerm' modes
   where
+    getMode' :: Target -> Int -> Int
+    getMode' User   mode  = shiftR mode 6 .&. 7
+    getMode' Group  mode  = shiftR mode 3 .&. 7
+    getMode' Others mode  = shiftR mode 0 .&. 7
     toPerm' :: Int -> Permission
     toPerm' mode =
       let
