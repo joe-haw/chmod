@@ -34,43 +34,43 @@ import ChmodCli
 import ChmodSystem
 
 data AppError = 
-  InvalidArguments | InvalidPath | ChmodFailed
+  InvalidArguments | StatFailed | ChmodFailed
 
 main = do
   let process :: ExceptT AppError IO () = do
         args <- liftIO getArgs
+        throwIf' (length(args) /= 2) InvalidArguments
 
-        if length(args) /= 2 then throwError InvalidArguments else return ()
         let [argFirst, argPath] = args
         argSetPermissions <- case (parseSetPermissions argFirst) of
               Just result -> return result
               _           -> throwError InvalidArguments
 
         (code, mode) <- liftIO $ statMode argPath
-        throwIfNotZero code InvalidPath
+        throwIf' (code /= 0) StatFailed
 
         let orig_perms = toPermissions mode
         let new_mode = toMode $ applySetPermissions orig_perms argSetPermissions
 
         code <- liftIO $ chmod new_mode argPath
-        throwIfNotZero code ChmodFailed
+        throwIf' (code /= 0) ChmodFailed
 
         return ()
   result <- runExceptT process
   case result of
     Left err -> do
-      handleErr err
+      handleErr' err
       Exit.exitFailure
     Right _ ->
       Exit.exitSuccess
   where
-    throwIfNotZero x err = case x of 
-      0 -> return ()
-      _ -> throwError err
-    handleErr err = case err of
-      InvalidArguments -> usage
-      InvalidPath -> putStrLn "Unable to access specified path"
+    throwIf' :: Bool -> AppError -> ExceptT AppError IO ()
+    throwIf' False err = return ()
+    throwIf' True  err = throwError err
+    handleErr' err = case err of
+      InvalidArguments -> usage'
+      StatFailed  -> putStrLn "Unable to access specified path"
       ChmodFailed -> putStrLn "Unable to change mode (chmod failed)"
-    usage = do
+    usage' = do
       putStrLn "Usage: [ugoa][=+-][rwx],... path"
       putStrLn "Example: chmod a=,ug=rw /tmp/a.txt"
