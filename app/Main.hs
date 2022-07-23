@@ -32,9 +32,8 @@ import Control.Monad.Except
 import Chmod
 import ChmodCli
 import ChmodSystem
-
 data AppError = 
-  InvalidArguments | StatFailed | ChmodFailed
+  ParseError String | InvalidArguments | StatFailed | ChmodFailed
 
 main = do
   let process :: ExceptT AppError IO () = do
@@ -42,15 +41,15 @@ main = do
         throwIf' (length(args) /= 2) InvalidArguments
 
         let [argFirst, argPath] = args
-        argSetPermissions <- case (parseSetPermissions argFirst) of
-              Just result -> return result
-              _           -> throwError InvalidArguments
+        new_perms <- case (parsePermissionUpdates argFirst) of
+              Left  err    -> throwError $ ParseError $ show err
+              Right result -> return result
 
         (code, mode) <- liftIO $ statMode argPath
         throwIf' (code /= 0) StatFailed
 
-        let orig_perms = toPermissions mode
-        let new_mode = toMode $ applySetPermissions orig_perms argSetPermissions
+        let orig_perms = fromMode mode
+        let new_mode = toMode $ applyPermissionUpdates orig_perms new_perms
 
         code <- liftIO $ chmod new_mode argPath
         throwIf' (code /= 0) ChmodFailed
@@ -68,6 +67,9 @@ main = do
     throwIf' False err = return ()
     throwIf' True  err = throwError err
     handleErr' err = case err of
+      ParseError err -> do 
+        putStrLn err
+        usage'
       InvalidArguments -> usage'
       StatFailed  -> putStrLn "Unable to access specified path"
       ChmodFailed -> putStrLn "Unable to change mode (chmod failed)"

@@ -22,7 +22,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 -}
 
 module ChmodCli (
-    parseSetPermissions
+    parsePermissionUpdates
 ) where
 
 import ChmodTypes
@@ -32,30 +32,34 @@ import Text.Parsec.String as P
 import Data.Char (toLower)
 
 import Data.List as List
-import Data.Map as Map
 
-parseSetPermissions :: String -> Maybe [SetPermission]
-parseSetPermissions args = do
-  let parser = P.sepEndBy1 parseSetPermission (P.char ',')
+parsePermissionUpdates :: String -> Either ParseError [PermissionUpdate]
+parsePermissionUpdates args = do
+  let parser = P.sepBy1 parsePermissionUpdate (P.char ',')
   case P.runParser parser () "" args of
-    Left _      -> Nothing
-    Right args  -> Just args
+    Left err      -> Left err
+    Right args    -> Right $ concat args
 
-parseSetPermission = do
-  targets <- P.string "a" <|> P.many (P.oneOf "ugo")
+parsePermissionUpdate = do
+  targets <- P.many1 (P.oneOf "ugoa")
   method  <- P.oneOf "+-="
-  perms   <- P.many (P.oneOf "rwx")
+  perms   <- P.manyTill (P.oneOf "rwxst") (try (do {
+    P.lookAhead $ P.char ',';
+    return ()
+  }) <|> P.eof)
 
   let
-      t = parseTargets targets
+      ts = parseTargets targets
       m = parseMethod method
-      p = parsePermissions perms
     in
-      return SetPermission {targets = t, method = m, permission = p}
+      return [
+        PermissionUpdate {target = t, method = m, permission = perm}
+        | t <- ts, let perm = parsePermissions t perms
+      ]
 
 parseTargets :: String -> [Target]
 parseTargets input =
-  concatMap parse input
+  concatMap parse $ fmap toLower input
   where
     parse c = case c of
       'u' -> [User]
@@ -63,18 +67,39 @@ parseTargets input =
       'o' -> [Others]
       'a' -> [User, Group, Others]
 
-parsePermissions :: String -> Permission
-parsePermissions input =
-  let perm = Permission {r=False,w=False,x=False}
-  in List.foldr parse perm input
-  where
-    parse c perm = case c of
-      'r' -> perm { r = True }
-      'w' -> perm { w = True }
-      'x' -> perm { x = True }
-
 parseMethod :: Char -> Method
 parseMethod method = case method of
     '+' -> Add
     '-' -> Remove
     '=' -> Set
+
+parsePermissions :: Target -> String -> Permission
+parsePermissions target input = do
+  let
+    rwx = parsePermission input
+    ext = parseExtPermission target input
+  makePermission target ext rwx
+  
+parseExtPermission :: Target -> String -> Extended
+parseExtPermission target input = 
+  let acc = makeExtended target False
+  in List.foldr (parse' target) acc input
+  where
+    parse' :: Target -> Char -> Extended -> Extended
+    parse' target c acc@(Extended ext_target _) =
+      case (target, ext_target, c) of
+      (User,    Suid,   's')  -> Extended Suid True
+      (Group,   Sgid,   's')  -> Extended Sgid True
+      (Others,  Sticky, 't')  -> Extended Sticky True
+      _                       -> acc
+
+parsePermission :: String -> RWX
+parsePermission input = 
+  List.foldr parse' (RWX False False False) input
+  where
+    parse' c acc@(RWX r w x) =
+      case c of
+      'r' -> RWX True w x
+      'w' -> RWX r True x
+      'x' -> RWX r w True
+      _   -> acc

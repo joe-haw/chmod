@@ -4,8 +4,8 @@ Chmod CLI Application and Library - written in Haskell
 ## CLI Usage
 
 ```bash
-# Usage: [ugoa][=+-][rwx],... path
-cabal run chmod a=r,ug=rwx /tmp/a.tx
+# Usage: [ugoa][=+-][rwxst],... path
+cabal run chmod a=r,ug=rwxs,o+t /tmp/a.txt
 ```
 
 ## Library Usage
@@ -19,11 +19,11 @@ import ChmodSystem
 main :: IO ()
 main = do
   let path = "/tmp/a.txt"
-  let (Just set_perms) = parseSetPermissions "u=rwx"
+  let (Right new_perms) = parsePermissionUpdates "u=rwx"
   
   (_, mode) <- statMode path
-  let orig_perms = toPermissions mode
-  let new_mode = toMode $ applySetPermissions orig_perms set_perms
+  let orig_perms = fromMode mode
+  let new_mode = toMode $ applyPermissionUpdates orig_perms new_perms
 
   chmod new_mode path
   
@@ -38,7 +38,7 @@ import ChmodSystem
 main :: IO ()
 main = do
   let path = "/tmp/a.txt"
-  chmod 0o777 path
+  chmod 0o7777 path
 
   putStrLn "OK."
 ```

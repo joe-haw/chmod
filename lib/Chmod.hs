@@ -22,10 +22,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 -}
 
 module Chmod (
-    module ChmodTypes,
-    applySetPermissions,
+    applyPermissionUpdates,
     toMode,
-    toPermissions,
+    fromMode,
 ) where
 
 import ChmodTypes
@@ -34,24 +33,15 @@ import Data.List as List
 import Data.Map as Map
 import Data.Bits ( Bits((.|.), shiftL, (.&.), shiftR) )
 
-(<||>) :: Permission -> Permission -> Permission
-(<||>) a b = Permission { r = (r a) || (r b), w = (w a) || (w b), x = (x a) || (x b) }
+applyPermissionUpdates :: Map Target Permission -> [PermissionUpdate] -> Map Target Permission
+applyPermissionUpdates perms new_perms = List.foldl applyPermissionUpdate perms new_perms
 
-(<&&>) :: Permission -> Permission -> Permission
-(<&&>) a b = Permission { r = (r a) && (r b), w = (w a) && (w b), x = (x a) && (x b) }
-
-invert :: Permission -> Permission
-invert perm = Permission { r = not(r perm), w = not(w perm), x = not(x perm) }
-
-applySetPermissions :: Map Target Permission -> [SetPermission] -> Map Target Permission
-applySetPermissions perms set_perms = List.foldl applySetPermission perms set_perms
-
-applySetPermission :: Map Target Permission -> SetPermission -> Map Target Permission
-applySetPermission perms set_perm =
+applyPermissionUpdate :: Map Target Permission -> PermissionUpdate -> Map Target Permission
+applyPermissionUpdate perms new_perm =
   let
-    SetPermission { targets = targets, method = method, permission = permission } = set_perm
+    PermissionUpdate { target = target, method = method, permission = permission } = new_perm
     lhs = perms
-    rhs = Map.fromList $ [(target, perm) | target <- targets, perm <- [permission]]
+    rhs = Map.fromList $ [(target, permission)]
     combine = combine' method
   in Map.unionWith combine lhs rhs
   where
@@ -60,53 +50,89 @@ applySetPermission perms set_perm =
     combine' Add    lhs rhs = lhs <||> rhs
     combine' Set    lhs rhs = rhs
 
-toMode :: Map Target Permission -> Int
-toMode perms =
+toExtMode :: Extended -> Int
+toExtMode (Extended kind val) = 
+  let mode = toMode' kind val
+  in mode `shiftL` 9
+  where 
+    toMode' Suid    True = 4 
+    toMode' Sgid    True = 2 
+    toMode' Sticky  True = 1
+    toMode' _       _    = 0
+
+fromExtMode :: Target -> Int -> Extended
+fromExtMode target_ mode_ =
   let
-    modes = Map.map toMode' perms
-    getMode' t = shift' t $ Map.findWithDefault 0 t modes
-
-    user_mode   = getMode' User
-    group_mode  = getMode' Group
-    others_mode = getMode' Others
-
-    mode = user_mode + group_mode + others_mode
-  in mode
+    kind = case target_ of 
+        User    -> Suid
+        Group   -> Sgid
+        Others  -> Sticky
+    mode  = mode_ `shiftR` 9
+    val   = isset' kind mode
+  in Extended kind val
   where
-    shift' :: Target -> Int -> Int 
-    shift' User   mode  = shiftL mode 6
-    shift' Group  mode  = shiftL mode 3
-    shift' Others mode  = shiftL mode 0
-    toMode' :: Permission -> Int
-    toMode' perm =
-      let
-        read  = if r perm then 4 else 0
-        write = if w perm then 2 else 0
-        exec  = if x perm then 1 else 0
-        mode = read + write + exec
-      in mode
+    isset' :: ExtendedKind -> Int -> Bool
+    isset' Suid   mode  = mode .&. 4 == 4
+    isset' Sgid   mode  = mode .&. 2 == 2
+    isset' Sticky mode  = mode .&. 1 == 1
 
-toPermissions :: Int -> Map Target Permission
-toPermissions mode =
-  let 
-    user_mode   = getMode' User   mode
-    group_mode  = getMode' Group  mode
-    others_mode = getMode' Others mode
+toRWXMode :: PermissionRWX -> Int
+toRWXMode (PermissionRWX kind (RWX r_ w_ x_)) = 
+  let
+    r = toMode' Read r_
+    w = toMode' Write w_
+    x = toMode' Execute x_
+    mode = (r + w + x)
+  in shift' kind mode
+  where
+    shift' :: Target -> Int -> Int
+    shift' User   mode = mode `shiftL` 6
+    shift' Group  mode = mode `shiftL` 3
+    shift' Others mode = mode `shiftL` 0
+    toMode' :: RWXMode -> Bool -> Int
+    toMode' Read    True  = 4
+    toMode' Write   True  = 2
+    toMode' Execute True  = 1
+    toMode' _       False = 0
 
-    modes = Map.fromList [
-      (User, user_mode),
-      (Group, group_mode),
-      (Others, others_mode)]
-  in Map.map toPerm' modes
+fromRWXMode :: Target -> Int -> PermissionRWX
+fromRWXMode kind mode_ =
+  let
+    mode = getMode' kind mode_
+    r = isset' Read     mode
+    w = isset' Write    mode
+    x = isset' Execute  mode
+  in PermissionRWX kind (RWX r w x)
   where
     getMode' :: Target -> Int -> Int
-    getMode' User   mode  = shiftR mode 6 .&. 7
-    getMode' Group  mode  = shiftR mode 3 .&. 7
-    getMode' Others mode  = shiftR mode 0 .&. 7
-    toPerm' :: Int -> Permission
-    toPerm' mode =
-      let
-        read  = mode .&. 4 == 4
-        write = mode .&. 2 == 2
-        exec  = mode .&. 1 == 1
-      in Permission { r = read, w = write, x = exec }
+    getMode' User   mode = mode `shiftR` 6
+    getMode' Group  mode = mode `shiftR` 3
+    getMode' Others mode = mode `shiftR` 0
+    isset' :: RWXMode -> Int -> Bool
+    isset' Read     mode  = mode .&. 4 == 4
+    isset' Write    mode  = mode .&. 2 == 2
+    isset' Execute  mode  = mode .&. 1 == 1
+
+toPermissionMode :: Permission -> Int
+toPermissionMode (Permission _ ext rwx) = toExtMode ext + toRWXMode rwx
+
+fromPermissionMode :: Target -> Int -> Permission
+fromPermissionMode kind mode =
+  let
+    ext = fromExtMode kind mode
+    rwx = fromRWXMode kind mode
+  in Permission kind ext rwx
+
+toMode :: Map Target Permission -> Int
+toMode perms = 
+  let
+    modes = Map.map toPermissionMode perms
+  in List.sum(modes)
+
+fromMode :: Int -> Map Target Permission
+fromMode mode =
+  let
+    user   = fromPermissionMode User mode
+    group  = fromPermissionMode Group mode
+    others = fromPermissionMode Others mode
+  in Map.fromList [(User, user), (Group, group), (Others, others)]
