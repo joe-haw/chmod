@@ -61,17 +61,19 @@ parseTargets :: String -> [Target]
 parseTargets input =
   concatMap parse $ fmap toLower input
   where
-    parse c = case c of
+    parse c =
+      case c of
       'u' -> [User]
       'g' -> [Group]
       'o' -> [Others]
       'a' -> [User, Group, Others]
 
 parseMethod :: Char -> Method
-parseMethod method = case method of
-    '+' -> Add
-    '-' -> Remove
-    '=' -> Set
+parseMethod method =
+  case method of
+  '+' -> Add
+  '-' -> Remove
+  '=' -> Set
 
 parsePermissions :: Target -> String -> Permission
 parsePermissions target input = do
@@ -82,16 +84,20 @@ parsePermissions target input = do
   
 parseExtPermission :: Target -> String -> Extended
 parseExtPermission target input = 
-  let acc = makeExtended target False
+  let
+    acc = case target of
+      User    -> Extended Suid    False
+      Group   -> Extended Sgid    False
+      Others  -> Extended Sticky  False
   in List.foldr (parse' target) acc input
   where
     parse' :: Target -> Char -> Extended -> Extended
-    parse' target c acc@(Extended ext_target _) =
-      case (target, ext_target, c) of
-      (User,    Suid,   's')  -> Extended Suid True
-      (Group,   Sgid,   's')  -> Extended Sgid True
-      (Others,  Sticky, 't')  -> Extended Sticky True
-      _                       -> acc
+    parse' target c acc =
+      case (target, c) of
+      (User,    's')  -> Extended Suid    True
+      (Group,   's')  -> Extended Sgid    True
+      (Others,  't')  -> Extended Sticky  True
+      _               -> acc
 
 parsePermission :: String -> RWX
 parsePermission input = 

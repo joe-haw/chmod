@@ -33,9 +33,7 @@ data Extended = Extended ExtendedKind Bool
 
 data Target = User | Group | Others
   deriving (Show, Eq, Ord)
-data PermissionRWX = PermissionRWX Target RWX
-  deriving (Show, Eq)
-data Permission = Permission Target Extended PermissionRWX
+data Permission = Permission Target Extended RWX
   deriving (Show, Eq)
 data Method = 
   Set | Add | Remove
@@ -47,19 +45,13 @@ data PermissionUpdate = PermissionUpdate {
   permission :: Permission
 } deriving (Show, Eq)
 
-makeExtended :: Target -> Bool -> Extended
-makeExtended target val = case target of
-  User    -> Extended Suid val
-  Group   -> Extended Sgid val
-  Others  -> Extended Sticky val
-
 makePermission ::
   Target -> Extended -> RWX -> Permission
-makePermission target ext@(Extended ext_target _) (RWX r w x)
-  | (target == User   && ext_target == Suid) ||
-    (target == Group  && ext_target == Sgid) ||
-    (target == Others && ext_target == Sticky)
-  = Permission target ext (PermissionRWX target (RWX r w x))
+makePermission target ext@(Extended kind _) (RWX r w x)
+  | (target == User   && kind == Suid) ||
+    (target == Group  && kind == Sgid) ||
+    (target == Others && kind == Sticky)
+  = Permission target ext (RWX r w x)
 
 class LogicalOps a where
   (<||>) :: a -> a -> a
@@ -75,14 +67,6 @@ instance LogicalOps RWX where
   (<||>) (RWX r w x) (RWX r_ w_ x_) = RWX (r || r_) (w || w_) (x || x_)
   (<&&>) (RWX r w x) (RWX r_ w_ x_) = RWX (r && r_) (w && w_) (x && x_)
   invert (RWX r w x) = RWX (not r) (not w) (not x)
-
-instance LogicalOps PermissionRWX where
-  (<||>) (PermissionRWX k rwx) (PermissionRWX _ rwx_) = 
-    PermissionRWX k (rwx <||> rwx_)
-  (<&&>) (PermissionRWX k rwx) (PermissionRWX _ rwx_) = 
-    PermissionRWX k (rwx <&&> rwx_)
-  invert (PermissionRWX k rwx) = 
-    PermissionRWX k (invert rwx)
 
 instance LogicalOps Permission where
   (<||>) (Permission k ext rwx) (Permission _ ext_ rwx_) = 

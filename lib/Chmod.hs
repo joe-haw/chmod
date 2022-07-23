@@ -61,9 +61,9 @@ toExtMode (Extended kind val) =
     toMode' _       _    = 0
 
 fromExtMode :: Target -> Int -> Extended
-fromExtMode target_ mode_ =
+fromExtMode target mode_ =
   let
-    kind = case target_ of 
+    kind = case target of 
         User    -> Suid
         Group   -> Sgid
         Others  -> Sticky
@@ -76,14 +76,14 @@ fromExtMode target_ mode_ =
     isset' Sgid   mode  = mode .&. 2 == 2
     isset' Sticky mode  = mode .&. 1 == 1
 
-toRWXMode :: PermissionRWX -> Int
-toRWXMode (PermissionRWX kind (RWX r_ w_ x_)) = 
+toRWXMode :: Target -> RWX -> Int
+toRWXMode target (RWX r_ w_ x_) = 
   let
     r = toMode' Read r_
     w = toMode' Write w_
     x = toMode' Execute x_
     mode = (r + w + x)
-  in shift' kind mode
+  in shift' target mode
   where
     shift' :: Target -> Int -> Int
     shift' User   mode = mode `shiftL` 6
@@ -95,14 +95,14 @@ toRWXMode (PermissionRWX kind (RWX r_ w_ x_)) =
     toMode' Execute True  = 1
     toMode' _       False = 0
 
-fromRWXMode :: Target -> Int -> PermissionRWX
-fromRWXMode kind mode_ =
+fromRWXMode :: Target -> Int -> RWX
+fromRWXMode target mode_ =
   let
-    mode = getMode' kind mode_
+    mode = getMode' target mode_
     r = isset' Read     mode
     w = isset' Write    mode
     x = isset' Execute  mode
-  in PermissionRWX kind (RWX r w x)
+  in RWX r w x
   where
     getMode' :: Target -> Int -> Int
     getMode' User   mode = mode `shiftR` 6
@@ -114,14 +114,14 @@ fromRWXMode kind mode_ =
     isset' Execute  mode  = mode .&. 1 == 1
 
 toPermissionMode :: Permission -> Int
-toPermissionMode (Permission _ ext rwx) = toExtMode ext + toRWXMode rwx
+toPermissionMode (Permission target ext rwx) = toExtMode ext + toRWXMode target rwx
 
 fromPermissionMode :: Target -> Int -> Permission
-fromPermissionMode kind mode =
+fromPermissionMode target mode =
   let
-    ext = fromExtMode kind mode
-    rwx = fromRWXMode kind mode
-  in Permission kind ext rwx
+    ext = fromExtMode target mode
+    rwx = fromRWXMode target mode
+  in Permission target ext rwx
 
 toMode :: Map Target Permission -> Int
 toMode perms = 
