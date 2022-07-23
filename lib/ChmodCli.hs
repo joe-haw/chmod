@@ -40,16 +40,16 @@ parsePermissionUpdates args = do
     Left err      -> Left err
     Right args    -> Right $ concat args
 
-trySkip :: ParsecT s u m a -> ParsecT s u m ()
-trySkip k = do
-  _ <- try k
+skip :: ParsecT s u m a -> ParsecT s u m ()
+skip p = do
+  _ <- p
   return ()
 
 parsePermissionUpdate = do
   targets <- P.many1 (P.oneOf "ugoa")
   method  <- P.oneOf "+-="
   perms   <- P.manyTill (P.oneOf "rwxst")
-    ((trySkip $ P.lookAhead $ P.char ',') <|> P.eof)
+    ((skip $ P.lookAhead $ P.char ',') <|> P.eof)
 
   let
       ts = parseTargets targets
