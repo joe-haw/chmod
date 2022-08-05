@@ -19,11 +19,11 @@ import ChmodSystem
 main :: IO ()
 main = do
   let path = "/tmp/a.txt"
-  let (Right new_perms) = parsePermissionUpdates "u=rwx"
+  let (Right updates) = parseUpdates "u=rwx"
   
   (_, mode) <- statMode path
-  let orig_perms = fromMode mode
-  let new_mode = toMode $ applyPermissionUpdates orig_perms new_perms
+  let cur_perms = fromMode mode
+  let new_mode = toMode $ applyUpdates cur_perms updates
 
   chmod new_mode path
   
