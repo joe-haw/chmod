@@ -22,7 +22,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 -}
 
 module Chmod (
-    applyPermissionUpdates,
+    applyUpdates,
     toMode,
     fromMode,
 ) where
@@ -33,22 +33,22 @@ import Data.List as List
 import Data.Map as Map
 import Data.Bits ( Bits((.|.), shiftL, (.&.), shiftR) )
 
-applyPermissionUpdates :: Map Target Permission -> [PermissionUpdate] -> Map Target Permission
-applyPermissionUpdates perms new_perms = List.foldl applyPermissionUpdate perms new_perms
+applyUpdates :: Map Target Permission -> [Update] -> Map Target Permission
+applyUpdates perms updates = List.foldl applyUpdate perms updates
 
-applyPermissionUpdate :: Map Target Permission -> PermissionUpdate -> Map Target Permission
-applyPermissionUpdate perms new_perm =
+applyUpdate :: Map Target Permission -> Update -> Map Target Permission
+applyUpdate perms update =
   let
-    PermissionUpdate { target = target, method = method, permission = permission } = new_perm
+    Update { target = target, method = method, permission = permission } = update
     lhs = perms
     rhs = Map.fromList $ [(target, permission)]
-    combine = combine' method
-  in Map.unionWith combine lhs rhs
+    applied = apply' method
+  in Map.unionWith applied lhs rhs
   where
-    combine' :: Method -> Permission -> Permission -> Permission
-    combine' Remove lhs rhs = lhs <&&> (invert rhs)
-    combine' Add    lhs rhs = lhs <||> rhs
-    combine' Set    lhs rhs = rhs
+    apply' :: Method -> Permission -> Permission -> Permission
+    apply' Remove lhs rhs = lhs <&&> (invert rhs)
+    apply' Add    lhs rhs = lhs <||> rhs
+    apply' Set    lhs rhs = rhs
 
 toExtMode :: Extended -> Int
 toExtMode (Extended kind val) = 
@@ -113,11 +113,8 @@ fromRWXMode target mode_ =
     isset' Write    mode  = mode .&. 2 == 2
     isset' Execute  mode  = mode .&. 1 == 1
 
-toPermissionMode :: Permission -> Int
-toPermissionMode (Permission target ext rwx) = toExtMode ext + toRWXMode target rwx
-
-fromPermissionMode :: Target -> Int -> Permission
-fromPermissionMode target mode =
+fromModeFor :: Target -> Int -> Permission
+fromModeFor target mode =
   let
     ext = fromExtMode target mode
     rwx = fromRWXMode target mode
@@ -126,13 +123,16 @@ fromPermissionMode target mode =
 toMode :: Map Target Permission -> Int
 toMode perms = 
   let
-    modes = Map.map toPermissionMode perms
+    modes = Map.map toMode' perms
   in List.sum(modes)
+  where
+    toMode' :: Permission -> Int
+    toMode' (Permission target ext rwx) = toExtMode ext + toRWXMode target rwx
 
 fromMode :: Int -> Map Target Permission
 fromMode mode =
   let
-    user   = fromPermissionMode User mode
-    group  = fromPermissionMode Group mode
-    others = fromPermissionMode Others mode
+    user   = fromModeFor User mode
+    group  = fromModeFor Group mode
+    others = fromModeFor Others mode
   in Map.fromList [(User, user), (Group, group), (Others, others)]

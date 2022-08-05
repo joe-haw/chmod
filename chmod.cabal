@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               chmod
-version:            0.2.0.0
+version:            0.3.0
 synopsis:           Chmod CLI Application and Library
 
 -- A longer description of the package.
@@ -29,9 +29,9 @@ library
     -- other-extensions:
     build-depends:
         base ^>=4.16.1.0,
-        parsec,
-        containers,
-        unix
+        parsec ^>=3.1.15,
+        containers >=0.6.5,
+        unix ^>=2.7.2
 
     hs-source-dirs:   lib
     default-language: Haskell2010
@@ -47,14 +47,23 @@ executable chmod
     build-depends:
         base ^>=4.16.1.0,
         chmod,
-        mtl
+        mtl ^>=2.2.2
 
     hs-source-dirs:   app
     default-language: Haskell2010
 
--- test-suite chmod-test
---     default-language: Haskell2010
---     type:             exitcode-stdio-1.0
---     hs-source-dirs:   test
---     main-is:          MyLibTest.hs
---     build-depends:    base ^>=4.16.1.0
+test-suite chmod-test
+    default-language: Haskell2010
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Spec.hs
+    build-depends:    
+        base ^>=4.16.1.0,
+        chmod,
+        QuickCheck ^>=2.14.2,
+        hspec ^>=2.10.0,
+        containers >=0.6.5,
+    other-modules:
+        ChmodSpec,
+        ChmodTypesSpec,
+        ChmodCliSpec

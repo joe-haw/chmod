@@ -39,7 +39,7 @@ data Method =
   Set | Add | Remove
   deriving (Show, Eq)
 
-data PermissionUpdate = PermissionUpdate {
+data Update = Update {
   target :: Target,
   method :: Method,
   permission :: Permission
@@ -59,8 +59,8 @@ class LogicalOps a where
   invert :: a -> a
 
 instance LogicalOps Extended where
-  (<||>) (Extended k val) (Extended t_ val_) = Extended k (val || val_)
-  (<&&>) (Extended k val) (Extended t_ val_) = Extended k (val && val_)
+  (<||>) (Extended k val) (Extended _ val_) = Extended k (val || val_)
+  (<&&>) (Extended k val) (Extended _ val_) = Extended k (val && val_)
   invert (Extended k val) = Extended k (not val)
 
 instance LogicalOps RWX where
@@ -69,9 +69,9 @@ instance LogicalOps RWX where
   invert (RWX r w x) = RWX (not r) (not w) (not x)
 
 instance LogicalOps Permission where
-  (<||>) (Permission k ext rwx) (Permission _ ext_ rwx_) = 
-    Permission k (ext <||> ext_) (rwx <||> rwx_)
-  (<&&>) (Permission k ext rwx) (Permission _ ext_ rwx_) = 
-    Permission k (ext <&&> ext_) (rwx <&&> rwx_)
-  invert (Permission k ext rwx) = 
-    Permission k (invert ext) (invert rwx)
+  (<||>) (Permission t ext rwx) (Permission _ ext_ rwx_) = 
+    Permission t (ext <||> ext_) (rwx <||> rwx_)
+  (<&&>) (Permission t ext rwx) (Permission _ ext_ rwx_) = 
+    Permission t (ext <&&> ext_) (rwx <&&> rwx_)
+  invert (Permission t ext rwx) = 
+    Permission t (invert ext) (invert rwx)

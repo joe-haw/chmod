@@ -41,15 +41,15 @@ main = do
         throwIf' (length(args) /= 2) InvalidArguments
 
         let [argFirst, argPath] = args
-        new_perms <- case (parsePermissionUpdates argFirst) of
+        updates <- case (parseUpdates argFirst) of
               Left  err    -> throwError $ ParseError $ show err
               Right result -> return result
 
         (code, mode) <- liftIO $ statMode argPath
         throwIf' (code /= 0) StatFailed
 
-        let orig_perms = fromMode mode
-        let new_mode = toMode $ applyPermissionUpdates orig_perms new_perms
+        let cur_perms = fromMode mode
+        let new_mode = toMode $ applyUpdates cur_perms updates
 
         code <- liftIO $ chmod new_mode argPath
         throwIf' (code /= 0) ChmodFailed

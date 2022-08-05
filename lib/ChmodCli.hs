@@ -22,7 +22,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 -}
 
 module ChmodCli (
-    parsePermissionUpdates
+    parseUpdates
 ) where
 
 import ChmodTypes
@@ -33,19 +33,19 @@ import Data.Char (toLower)
 
 import Data.List as List
 
-parsePermissionUpdates :: String -> Either ParseError [PermissionUpdate]
-parsePermissionUpdates args = do
-  let parser = P.sepBy1 parsePermissionUpdate (P.char ',')
+parseUpdates :: String -> Either ParseError [Update]
+parseUpdates args = do
+  let parser = P.sepBy1 parseUpdate (P.char ',')
   case P.runParser parser () "" args of
     Left err      -> Left err
-    Right args    -> Right $ concat args
+    Right updates -> Right $ concat updates
 
 skip :: ParsecT s u m a -> ParsecT s u m ()
 skip p = do
   _ <- p
   return ()
 
-parsePermissionUpdate = do
+parseUpdate = do
   targets <- P.many1 (P.oneOf "ugoa")
   method  <- P.oneOf "+-="
   perms   <- P.manyTill (P.oneOf "rwxst")
@@ -56,7 +56,7 @@ parsePermissionUpdate = do
       m = parseMethod method
     in
       return [
-        PermissionUpdate {target = t, method = m, permission = perm}
+        Update {target = t, method = m, permission = perm}
         | t <- ts, let perm = parsePermissions t perms
       ]
 

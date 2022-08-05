@@ -43,6 +43,14 @@ main = do
   putStrLn "OK."
 ```
 
+## Tests
+
+Run test suite
+
+```bash
+cabal test
+```
+
 ## License
 
 See LICENSE 
