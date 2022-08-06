@@ -105,43 +105,41 @@ genUpdateWith ms = do
 genUpdatesWith :: [Method] -> Gen [Update]
 genUpdatesWith ms = listOf $ genUpdateWith ms
 
-prop_bitSet :: Bool -> Int -> Int -> Bool
-prop_bitSet True value bit = (value .&. bit) /= 0
-prop_bitSet False value bit = not (prop_bitSet True value bit)
+prop_bitSet :: Int -> Int -> Bool
+prop_bitSet value bit = (value .&. bit) /= 0
 
-relation_ReadMode :: RWX -> Int -> Bool
-relation_ReadMode (RWX r _ _) mode = prop_bitSet r mode 4
-relation_WriteMode :: RWX -> Int -> Bool
-relation_WriteMode (RWX _ w _) mode = prop_bitSet w mode 2
-relation_ExexMode :: RWX -> Int -> Bool
-relation_ExexMode (RWX _ _ x) mode = prop_bitSet x mode 1
-
-prop_rwxAndMode :: RWX -> Int -> Bool
-prop_rwxAndMode rwx mode =
+prop_rwxMode :: Target -> RWX -> Int -> Bool
+prop_rwxMode t (RWX r w x) mode_full =
+  let
+    mode = case t of
+      User    -> mode_full `shiftR` 6
+      Group   -> mode_full `shiftR` 3
+      Others  -> mode_full `shiftR` 0
+  in
   and [
-    relation_ReadMode rwx mode,
-    relation_WriteMode rwx mode,
-    relation_ExexMode rwx mode
+    r == (prop_bitSet mode 4),
+    w == (prop_bitSet mode 2),
+    x == (prop_bitSet mode 1)
   ]
 
-relation_RwxMode :: Target -> RWX -> Mode -> Bool
-relation_RwxMode User rwx mode   = prop_rwxAndMode rwx (mode `shiftR` 6)
-relation_RwxMode Group rwx mode  = prop_rwxAndMode rwx (mode `shiftR` 3)
-relation_RwxMode Others rwx mode = prop_rwxAndMode rwx (mode `shiftR` 0) 
+prop_extMode t (Extended k val) mode_full =
+  let
+    mode = mode_full `shiftR` 9
+  in
+    case (t, k) of
+      (User, Suid) ->
+        val == prop_bitSet mode 4
+      (Group, Sgid) ->
+        val == prop_bitSet mode 2
+      (Others, Sticky) ->
+        val == prop_bitSet mode 1
+      _ -> False
 
-relation_ExtMode :: Target -> Extended -> Mode -> Bool
-relation_ExtMode User (Extended Suid val) mode = 
-  prop_bitSet val (mode `shiftR` 9) 4
-relation_ExtMode Group (Extended Sgid val) mode = 
-  prop_bitSet val (mode `shiftR` 9) 2
-relation_ExtMode Others (Extended Sticky val) mode = 
-  prop_bitSet val (mode `shiftR` 9) 1
-
-relation_PermMode :: Permission -> ModesInt -> Bool
-relation_PermMode (Permission t ext rwx) mode = 
+prop_permMode :: Permission -> ModesInt -> Bool
+prop_permMode (Permission t ext rwx) mode = 
   and [
-    relation_ExtMode t ext mode,
-    relation_RwxMode t rwx mode
+    prop_extMode t ext mode,
+    prop_rwxMode t rwx mode
   ]
 
 prop_fromModeAndBack :: Property
@@ -167,9 +165,9 @@ prop_toMode =
       (Just others) = Map.lookup Others perms
     in
     and [
-      relation_PermMode user mode,
-      relation_PermMode group mode,
-      relation_PermMode others mode
+      prop_permMode user mode,
+      prop_permMode group mode,
+      prop_permMode others mode
     ]
   )
 
@@ -184,9 +182,9 @@ prop_fromMode =
       (Just others) = Map.lookup Others perms
     in
     and [
-      relation_PermMode user mode,
-      relation_PermMode group mode,
-      relation_PermMode others mode
+      prop_permMode user mode,
+      prop_permMode group mode,
+      prop_permMode others mode
     ]
   )
 
