@@ -87,13 +87,10 @@ genPermsMap = do
       (Others, others)
     ]) 
 
-createUpdateFor :: Target -> Method -> Permission -> Update
-createUpdateFor t m p = Update t m p
-
 genUpdateFor :: Target -> Method -> Gen Update
 genUpdateFor t m = do
   p <- genPerm t
-  return $ createUpdateFor t m p
+  return $ Update t m p
 
 genUpdate :: Method -> Gen Update
 genUpdate m = do

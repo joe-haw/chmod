@@ -40,6 +40,7 @@ parse str = do
     Right updates ->
       Just updates
 
+type UGO = Char
 type UGOA = Char
 type EqualPlusMinus = Char
 type RWXST = Char
@@ -54,43 +55,72 @@ genUpdate = (,,) <$> (listOf1 $ genTarget) <*> (genMethod) <*> (listOf genRwxst)
 updateToStr :: ([UGOA], EqualPlusMinus, [RWXST]) -> String
 updateToStr = (\(t, m, p) -> t <> [m] <> p)
 
-makeExpectations :: (String, Char, String) -> [Update]
-makeExpectations (targets, method, perms) = do
-  concat $ map mkExpectations' targets
-  where
-    mkExpectations' t = case t of
-      'a' -> makeExpectations ("ugo", method, perms)
-      _   -> [mkExpect' t method perms]
-    expectedTarget' 'u' = User
-    expectedTarget' 'g' = Group
-    expectedTarget' 'o' = Others
-    expectedMethod' '=' = Set
-    expectedMethod' '+' = Add
-    expectedMethod' '-' = Remove
-    expectedRWX' perms = do
-      let r = 'r' `elem` perms
-      let w = 'w' `elem` perms
-      let x = 'x' `elem` perms
-      RWX r w x
-    expectedExt' User perms   = (Extended Suid $ 's' `elem` perms)
-    expectedExt' Group perms  = (Extended Sgid $ 's' `elem` perms)
-    expectedExt' Others perms = (Extended Sticky $ 't' `elem` perms)
-    mkExpect' :: Char -> Char -> String -> Update
-    mkExpect' target method perms =
-      let
-        t = expectedTarget' target
-        m = expectedMethod' method
-        ext = expectedExt' t perms
-        rwx = expectedRWX' perms
-      in Update t m (Permission t ext rwx)
+prop_updateTarget :: UGO -> Update -> Bool
+prop_updateTarget 'u' (Update User _ _) = True
+prop_updateTarget 'g' (Update Group _ _) = True
+prop_updateTarget 'o' (Update Others _ _) = True
+prop_updateTarget _ _ = False
+
+prop_updateMethod :: EqualPlusMinus -> Update -> Bool
+prop_updateMethod '=' (Update _ Set _) = True
+prop_updateMethod '+' (Update _ Add _) = True
+prop_updateMethod '-' (Update _ Remove _) = True
+prop_updateMethod _ _ = False
+
+prop_permsExtFor :: Target -> [RWXST] -> Extended -> Bool
+prop_permsExtFor User p (Extended Suid val) = 
+  val == ('s' `elem` p)
+prop_permsExtFor Group p (Extended Sgid val) = 
+  val == ('s' `elem` p)
+prop_permsExtFor Others p (Extended Sticky val) = 
+  val == ('t' `elem` p)
+
+prop_permsRWX :: [RWXST] -> RWX -> Bool
+prop_permsRWX p (RWX r w x) =
+  and [
+    r == ('r' `elem` p),
+    w == ('w' `elem` p),
+    x == ('x' `elem` p)
+  ]
+
+prop_updatePerms :: [RWXST] -> Update -> Bool
+prop_updatePerms p (Update t _ (Permission t_ ext rwx)) =
+  and [
+    t == t_,
+    prop_permsExtFor t p ext,
+    prop_permsRWX p rwx
+  ]
+
+prop_updateFor :: UGO -> EqualPlusMinus -> [RWXST] -> Update -> Bool
+prop_updateFor t m p u = 
+  and [
+    prop_updateTarget t u,
+    prop_updateMethod m u
+  ]
+
+prop_updatesFor :: [([UGOA], EqualPlusMinus, [RWXST])] -> [Update] -> Bool
+prop_updatesFor ((('a' : ts), m, p) : xs) updates =
+  prop_updatesFor ([("ugo" ++ ts, m, p)] ++ xs) updates
+prop_updatesFor ((t : ts, m, p) : xs) (u : updates) = 
+  prop_updateFor t m p u
+    && prop_updatesFor ([(ts, m, p)] ++ xs) updates
+prop_updatesFor (([], _, _) : xs) updates =
+  prop_updatesFor xs updates
+
+prop_updatesFor xs []
+  | length(xs) > 0
+  = False
+prop_updatesFor [] updates
+  | length(updates) > 0
+  = False
+prop_updatesFor [] [] = True
 
 prop_parseSingleUpdate :: Property
 prop_parseSingleUpdate =
   forAll genUpdate (\update -> do
     let single = updateToStr update
     let (Just actual) = parse single
-    let expectations = makeExpectations update 
-    actual == expectations
+    prop_updatesFor [update] actual
   )
 
 prop_parseMultipleUpdates :: Property
@@ -99,8 +129,7 @@ prop_parseMultipleUpdates =
   forAll (genUpdates) (\updates -> do
     let multi = intercalate "," $ map updateToStr updates
     let (Just actual) = parse multi
-    let expectations = concat $ map makeExpectations updates
-    actual == expectations
+    prop_updatesFor updates actual
   )
 
 prop_parseLeadingComma :: Property
