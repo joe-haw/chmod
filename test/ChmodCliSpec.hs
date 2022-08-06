@@ -95,7 +95,8 @@ prop_updateFor :: UGO -> EqualPlusMinus -> [RWXST] -> Update -> Bool
 prop_updateFor t m p u = 
   and [
     prop_updateTarget t u,
-    prop_updateMethod m u
+    prop_updateMethod m u,
+    prop_updatePerms p u
   ]
 
 prop_updatesFor :: [([UGOA], EqualPlusMinus, [RWXST])] -> [Update] -> Bool
