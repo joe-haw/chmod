@@ -74,5 +74,5 @@ main = do
       StatFailed  -> putStrLn "Unable to access specified path"
       ChmodFailed -> putStrLn "Unable to change mode (chmod failed)"
     usage' = do
-      putStrLn "Usage: [ugoa][=+-][rwx],... path"
+      putStrLn "Usage: [ugoa][=+-][rwxst],... path"
       putStrLn "Example: chmod a=,ug=rw /tmp/a.txt"
